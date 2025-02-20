@@ -21,19 +21,21 @@ const router = createRouter({
         }
     ]
 });
+
 router.beforeEach((to, from, next) => {
     const token = localStorage.getItem('token');
     console.log('Router Guard:', { to, token });
 
     if (to.meta.requiresAuth && !token) {
-        console.log('Redirecionando para login - não autenticado');
+        console.log('Redirecting to login - not authenticated');
         next('/login');
     } else if (to.path === '/login' && token) {
-        console.log('Redirecionando para chat - já autenticado');
+        console.log('Redirecting to chat - already authenticated');
         next('/chat');
     } else {
-        console.log('Navegação permitida');
+        console.log('Navigation allowed');
         next();
     }
 });
+
 export default router;
