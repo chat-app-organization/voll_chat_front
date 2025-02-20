@@ -21,7 +21,7 @@
     <!-- Main Chat Area -->
     <div class="flex-1 flex overflow-hidden">
       <!-- Users List -->
-      <div class="w-1/4 bg-white border-r">
+      <div class="w-1/4 bg-white border-r overflow-hidden">
         <div class="p-4">
           <h2 class="text-lg font-semibold mb-4 text-black">Usuários</h2>
 
@@ -41,7 +41,7 @@
               v-for="user in users"
               :key="user.id"
               @click="selectUser(user)"
-              class="p-3 cursor-pointer rounded border hover:bg-gray-100 bg-white text-black"
+              class="p-3 cursor-pointer rounded border hover:bg-gray-100 bg-white text-black truncate"
               :class="{ 'bg-blue-100': selectedUser?.id === user.id }"
           >
             {{ user.email }}
@@ -92,7 +92,7 @@
                 v-model="newMessage"
                 type="text"
                 placeholder="Digite sua mensagem..."
-                class="flex-1 p-2 border rounded text-white"
+                class="flex-1 p-2 border rounded text-black bg-white"
                 :disabled="!selectedUser"
             />
             <button
@@ -213,36 +213,52 @@ const sendMessage = async () => {
 
 // Configura WebSocket
 const setupChatChannel = () => {
-  if (!currentUser.value || !selectedUser.value) return;
-
-  if (channel.value) {
-    channel.value.unsubscribe();
+  if (!currentUser.value) {
+    console.error('Usuário atual não definido!');
+    return;
   }
 
+  // Verifica se o canal já está configurado para o usuário atual
+  if (channel.value && selectedUser.value) {
+    console.log('Canal já configurado. Nenhuma nova assinatura necessária.');
+    return; // Impede reconfiguração desnecessária
+  }
+
+  // Desconecte o canal antigo, se houver
+  if (channel.value) {
+    channel.value.unsubscribe();
+    console.log('Canal anterior desconectado.');
+  }
+
+  // Conecta ao WebSocket do servidor
   const wsUrl = import.meta.env.VITE_WEBSOCKET_URL || 'ws://localhost:3000';
   cable.value = createConsumer(`${wsUrl}/cable?token=${authStore.token}`);
 
+  // Assina o canal
   channel.value = cable.value.subscriptions.create(
-      {
-        channel: 'ChatChannel',
-        sender_id: currentUser.value.id,
-        recipient_id: selectedUser.value.id
-      },
+      { channel: 'ChatChannel' },
       {
         connected() {
-          console.log('WebSocket conectado.');
+          console.log('Conectado ao WebSocket no ChatChannel.');
         },
-
         received(data) {
-          const exists = messages.value.some((msg) => msg.id === data.id);
-          if (!exists) {
-            messages.value.push(data);
-            scrollToBottom();
+          console.log('Nova mensagem via WebSocket:', data);
+
+          if (
+              selectedUser.value &&
+              (data.sender.id === selectedUser.value.id || data.sender.id === currentUser.value.id)
+          ) {
+            const exists = messages.value.some((msg) => msg.id === data.id);
+            if (!exists) {
+              messages.value.push(data); // Adiciona a mensagem ao chat
+              scrollToBottom();
+            }
+          } else {
+            console.warn('Mensagem recebida não pertence à conversa ativa.');
           }
         },
-
         disconnected() {
-          console.log('WebSocket desconectado.');
+          console.log('WebSocket desconectado do ChatChannel.');
         }
       }
   );
@@ -252,6 +268,17 @@ const setupChatChannel = () => {
 const selectUser = (user) => {
   selectedUser.value = user;
 };
+
+const logout = () => {
+  try {
+    authStore.logout(); // Chama o método logout da store
+    router.push('/login'); // Redireciona para a página de login
+  } catch (error) {
+    console.error('Erro ao executar logout:', error);
+  }
+};
+
+
 
 // Lifecycle
 onMounted(async () => {
