@@ -21,26 +21,32 @@ export const useAuthStore = defineStore('auth', {
 
                 const { token, user } = response.data
 
-                // Primeiro configurar o token no Axios
+                // Configure token with Bearer prefix
                 axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
 
-                // Depois atualizar o estado
+                // Update state
                 this.token = token
                 this.user = user
 
-                // Por último, persistir no localStorage
+                // Persist to localStorage
                 localStorage.setItem('token', token)
                 localStorage.setItem('user', JSON.stringify(user))
 
                 return response.data
             } catch (error) {
-                console.error('Store: Erro no login:', error)
+                console.error('Store: Login error:', error)
                 throw error.response?.data?.error || 'Login failed'
             }
         },
 
+        initialize() {
+            const token = localStorage.getItem('token')
+            if (token) {
+                axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+            }
+        },
+
         logout() {
-            console.log('Store: Realizando logout')
             this.token = null
             this.user = null
             localStorage.removeItem('token')

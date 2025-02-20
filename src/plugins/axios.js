@@ -1,32 +1,41 @@
-import axios from 'axios'
+import axios from 'axios';
 
-// Configure base URL
 const instance = axios.create({
     baseURL: 'http://localhost:3000',
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
     }
-})
+});
 
-// Add token to requests if available
-const token = localStorage.getItem('token')
-if (token) {
-    instance.defaults.headers.common['Authorization'] = `Bearer ${token}`
-}
+instance.interceptors.request.use(
+    config => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            config.headers['Authorization'] = `Bearer ${token}`;
+            console.log('Token being sent:', token);
+            console.log('Full headers:', config.headers);
+        }
+        return config;
+    },
+    error => {
+        console.error('Request error:', error);
+        return Promise.reject(error);
+    }
+);
 
-// Add response interceptor
 instance.interceptors.response.use(
     response => response,
     error => {
-        console.error('Axios error:', error.response || error)
+        console.error('Response error:', error.response);
         if (error.response?.status === 401) {
-            localStorage.removeItem('token')
-            localStorage.removeItem('user')
-            window.location.href = '/login'
+            console.error('Authentication error:', error.response.data);
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
         }
-        return Promise.reject(error)
+        return Promise.reject(error);
     }
-)
+);
 
-export default instance
+export default instance;
