@@ -4,12 +4,17 @@
     <header class="bg-white shadow p-4">
       <div class="flex justify-between items-center">
         <h1 class="text-xl font-semibold">Chat</h1>
-        <button
-            @click="logout"
-            class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-        >
-          Logout
-        </button>
+
+        <!-- Mostra o usuário logado ao lado do botão Logout -->
+        <div class="flex items-center gap-4">
+          <span class="text-gray-700">Logado como: <strong>{{ currentUser?.email }}</strong></span>
+          <button
+              @click="logout"
+              class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+          >
+            Logout
+          </button>
+        </div>
       </div>
     </header>
 
@@ -18,53 +23,56 @@
       <!-- Users List -->
       <div class="w-1/4 bg-white border-r">
         <div class="p-4">
-          <h2 class="text-lg font-semibold mb-4">Users</h2>
+          <h2 class="text-lg font-semibold mb-4 text-black">Usuários</h2>
+
           <!-- Loading State -->
           <div v-if="loading" class="text-center text-gray-500">
-            Loading users...
+            Carregando...
           </div>
+
           <!-- Empty State -->
           <div v-else-if="users.length === 0" class="text-center text-gray-500">
-            No users available
+            Nenhum usuário disponível.
           </div>
+
           <!-- Users List -->
           <div
               v-else
               v-for="user in users"
               :key="user.id"
               @click="selectUser(user)"
-              :class="[
-              'p-3 cursor-pointer rounded hover:bg-gray-100',
-              selectedUser?.id === user.id ? 'bg-blue-50' : ''
-            ]"
+              class="p-3 cursor-pointer rounded border hover:bg-gray-100 bg-white text-black"
+              :class="{ 'bg-blue-100': selectedUser?.id === user.id }"
           >
             {{ user.email }}
           </div>
         </div>
       </div>
 
-      <!-- Messages Area -->
+      <!-- Chat Messages Area -->
       <div class="flex-1 flex flex-col">
         <!-- Messages Container -->
         <div ref="messagesContainer" class="flex-1 p-4 overflow-y-auto">
           <!-- Loading State -->
           <div v-if="loadingMessages" class="text-center text-gray-500">
-            Loading messages...
+            Carregando mensagens...
           </div>
-          <!-- No Selected User State -->
+
+          <!-- No User Selected -->
           <div v-else-if="!selectedUser" class="text-center text-gray-500">
-            Select a user to start chatting
+            Selecione um usuário para iniciar o chat.
           </div>
+
           <!-- Messages -->
           <div
               v-else
-              v-for="message in messages"
+              v-for="message in sortedMessages"
               :key="message.id"
               :class="[
               'mb-4 max-w-[70%] rounded-lg p-3',
               message.sender.id === currentUser.id
                 ? 'ml-auto bg-blue-500 text-white'
-                : 'bg-gray-200'
+                : 'bg-gray-200 text-black'
             ]"
           >
             <div class="text-sm opacity-75 mb-1">
@@ -83,8 +91,8 @@
             <input
                 v-model="newMessage"
                 type="text"
-                placeholder="Type your message..."
-                class="flex-1 p-2 border rounded"
+                placeholder="Digite sua mensagem..."
+                class="flex-1 p-2 border rounded text-white"
                 :disabled="!selectedUser"
             />
             <button
@@ -92,7 +100,7 @@
                 class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
                 :disabled="!selectedUser || !newMessage.trim()"
             >
-              Send
+              Enviar
             </button>
           </form>
         </div>
@@ -102,87 +110,87 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { createConsumer } from '@rails/actioncable'
 import axios from '@/plugins/axios'
 import { format } from 'date-fns'
 
-// Instances
-const router = useRouter()
-const authStore = useAuthStore()
+// Instâncias e variáveis
+const router = useRouter();
+const authStore = useAuthStore();
 
-// Reactive variables
-const currentUser = ref(null)
-const users = ref([])
-const selectedUser = ref(null)
-const messages = ref([])
-const newMessage = ref('')
-const messagesContainer = ref(null)
-const loading = ref(false)
-const loadingMessages = ref(false)
+const currentUser = ref(null); // Usuário logado
+const users = ref([]); // Lista de usuários
+const selectedUser = ref(null); // Usuário selecionado
+const messages = ref([]); // Mensagens na conversa
+const newMessage = ref(''); // Conteúdo da nova mensagem
+const loading = ref(false); // Indicador de carregamento de usuários
+const loadingMessages = ref(false); // Indicador de carregamento de mensagens
+const messagesContainer = ref(null); // Contêiner para scroll automático
 
-// WebSocket related
-const cable = ref(null)
-const channel = ref(null)
+const cable = ref(null); // WebSocket
+const channel = ref(null); // Canal WebSocket
 
-// Helper Functions
-const formatDate = (date) => format(new Date(date), 'HH:mm')
+// Funções auxiliares
+const formatDate = (date) => format(new Date(date), 'HH:mm');
 
+// Scroll para baixo
 const scrollToBottom = () => {
   if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
-}
+};
 
-// API Calls
+// Computed: Mensagens ordenadas
+const sortedMessages = computed(() =>
+    [...messages.value].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+);
+
+// Busca o usuário logado
 const fetchCurrentUser = async () => {
   try {
-    if (!authStore.token) {
-      throw new Error('No token available')
-    }
-    console.log('Current user from store:', authStore.user)
-    currentUser.value = authStore.user
+    if (!authStore.token) throw new Error('Sem token disponível');
+    currentUser.value = authStore.user;
   } catch (error) {
-    console.error('Error fetching current user:', error)
-    router.push('/login')
+    console.error('Erro ao buscar usuário atual:', error);
+    router.push('/login');
   }
-}
+};
 
+// Busca a lista de usuários
 const fetchUsers = async () => {
   try {
-    loading.value = true
-    console.log('Fetching users...')
-    const { data } = await axios.get('/api/v1/users')
-    console.log('Users received:', data)
-    users.value = data.filter(user => user.id !== currentUser.value?.id)
-    console.log('Filtered users:', users.value)
+    loading.value = true;
+    const { data } = await axios.get('/api/v1/users');
+    users.value = data.filter((user) => user.id !== currentUser.value?.id);
   } catch (error) {
-    console.error('Error fetching users:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status
-    })
+    console.error('Erro ao buscar usuários:', error);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
+// Busca as mensagens do usuário selecionado
 const fetchMessages = async () => {
   if (!selectedUser.value) return;
 
   try {
+    loadingMessages.value = true;
     const { data } = await axios.get('/api/v1/messages', {
       params: { user_id: selectedUser.value.id }
     });
     messages.value = data;
-    scrollToBottom();
+    scrollToBottom(); // Atualiza o scroll
   } catch (error) {
     console.error('Erro ao buscar mensagens:', error);
+  } finally {
+    loadingMessages.value = false;
   }
 };
 
+// Envia uma nova mensagem
 const sendMessage = async () => {
   if (!newMessage.value.trim() || !selectedUser.value) return;
 
@@ -190,42 +198,22 @@ const sendMessage = async () => {
     const response = await axios.post('/api/v1/messages', {
       message: {
         content: newMessage.value,
+        sender_id: currentUser.value.id,
         recipient_id: selectedUser.value.id
       }
     });
 
-    // Adiciona a mensagem localmente
-    messages.value.push(response.data);
-    newMessage.value = '';
+    messages.value.push(response.data); // Adiciona à lista local
+    newMessage.value = ''; // Limpa o campo de entrada
     scrollToBottom();
   } catch (error) {
     console.error('Erro ao enviar mensagem:', error);
   }
 };
 
-// User Actions
-const selectUser = (user) => {
-  console.log('Selected user:', user)
-  selectedUser.value = user
-  setupChatChannel()
-  fetchMessages()
-}
-
-const logout = async () => {
-  try {
-    if (channel.value) channel.value.unsubscribe()
-    if (cable.value) cable.value.disconnect()
-    await authStore.logout()
-    await router.push('/login')
-  } catch (error) {
-    console.error('Error during logout:', error)
-  }
-}
-
-// WebSocket Setup
-// Setup ActionCable
+// Configura WebSocket
 const setupChatChannel = () => {
-  if (!currentUser.value) return;
+  if (!currentUser.value || !selectedUser.value) return;
 
   if (channel.value) {
     channel.value.unsubscribe();
@@ -235,35 +223,47 @@ const setupChatChannel = () => {
   cable.value = createConsumer(`${wsUrl}/cable?token=${authStore.token}`);
 
   channel.value = cable.value.subscriptions.create(
-      { channel: 'ChatChannel' },
+      {
+        channel: 'ChatChannel',
+        sender_id: currentUser.value.id,
+        recipient_id: selectedUser.value.id
+      },
       {
         connected() {
-          console.log('Connected to ChatChannel');
+          console.log('WebSocket conectado.');
         },
+
         received(data) {
-          messages.value.push(data);
-          scrollToBottom();
+          const exists = messages.value.some((msg) => msg.id === data.id);
+          if (!exists) {
+            messages.value.push(data);
+            scrollToBottom();
+          }
+        },
+
+        disconnected() {
+          console.log('WebSocket desconectado.');
         }
       }
   );
 };
 
-// Lifecycle Hooks
-onMounted(async () => {
-  console.log('Chat component mounted')
-  await fetchCurrentUser()
-  if (currentUser.value) {
-    await fetchUsers()
-    setupChatChannel()
-  }
-})
+// Ações de usuário
+const selectUser = (user) => {
+  selectedUser.value = user;
+};
 
-// Watchers
-watch(selectedUser, () => {
-  if (selectedUser.value) {
-    fetchMessages()
-  } else {
-    messages.value = []
+// Lifecycle
+onMounted(async () => {
+  await fetchCurrentUser();
+  await fetchUsers();
+});
+
+// Watches
+watch(selectedUser, async (newUser) => {
+  if (newUser) {
+    await fetchMessages();
+    setupChatChannel();
   }
-})
+});
 </script>
